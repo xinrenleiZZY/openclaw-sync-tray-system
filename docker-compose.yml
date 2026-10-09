@@ -1,0 +1,82 @@
+# 模型健康监控中心 - Docker 编排
+# 端口规划: 7600-7602（已确认本机 7500/7502 被旧系统占用，7600-7602 空闲）
+# - 7600: Web 前端 (Next.js 15)
+# - 7601: API 后端 (FastAPI)  ← 虚拟机推送入口（局域网）
+# - 7602: PostgreSQL (数据库)
+# 显式指定项目名：目录名为中文无法自动派生，否则报 "project name must not be empty"
+name: mhc
+
+services:
+  mhc-db:
+    image: postgres:16-alpine
+    container_name: mhc-db
+    restart: unless-stopped
+    ports:
+      - "${MHC_DB_PORT:-7602}:5432"
+    environment:
+      - POSTGRES_USER=mhc
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?请在项目根目录 .env 中配置 DB_PASSWORD}
+      - POSTGRES_DB=mhc_monitor
+      - TZ=Asia/Shanghai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mhc -d mhc_monitor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mhc-api:
+    build:
+      context: ./mhc-api
+      dockerfile: Dockerfile
+    container_name: mhc-api
+    restart: unless-stopped
+    ports:
+      - "${MHC_API_PORT:-7601}:8000"
+    environment:
+      - TZ=Asia/Shanghai
+      - MHC_HOST=${MHC_HOST:?请在项目根目录 .env 中配置 MHC_HOST}
+      - MHC_API_PORT=${MHC_API_PORT:-7601}
+      - MHC_WEB_PORT=${MHC_WEB_PORT:-7600}
+      - MHC_DATA_DIR=/app/data
+      - MHC_SOURCE_DIR=/app/source
+      - MHC_PUSH_TOKEN=${MHC_PUSH_TOKEN:-}
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      - FEISHU_WIKI_TOKEN=${FEISHU_WIKI_TOKEN:-}
+      - FEISHU_SHEET_REGISTER=openclaw登记
+      - DATABASE_URL=postgresql://mhc:${DB_PASSWORD}@mhc-db:5432/mhc_monitor
+    volumes:
+      - ./mhc-data:/app/data
+      - ./:/app/source:ro
+    depends_on:
+      mhc-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mhc-web:
+    build:
+      context: ./mhc-web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_MHC_HOST: ${MHC_HOST:?请在项目根目录 .env 中配置 MHC_HOST}
+        NEXT_PUBLIC_MHC_API_PORT: ${MHC_API_PORT:-7601}
+    container_name: mhc-web
+    restart: unless-stopped
+    ports:
+      - "${MHC_WEB_PORT:-7600}:3000"
+    environment:
+      - TZ=Asia/Shanghai
+      - API_BASE_URL=http://mhc-api:8000
+      - NEXT_TELEMETRY_DISABLED=1
+    depends_on:
+      mhc-api:
+        condition: service_healthy
+
+volumes:
+  pgdata:

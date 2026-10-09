@@ -1,0 +1,40 @@
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# Node
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Rust / Tauri 构建产物
+target/
+dist/
+
+# 运行时数据
+mhc-api/data/
+mhc-data/
+*.db
+*.sqlite
+*.sqlite3
+
+# 日志
+logs/
+*.log
+
+# 本地工具 / 会话产物（不属于本仓库）
+usage_data/
+.usage-cost-cache.json
+sessions.json
+CEO/
+*.jsonl
+
+# 系统文件
+Thumbs.db
+.DS_Store
